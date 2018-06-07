@@ -841,7 +841,8 @@ class BunnyCDN
 		die();
 	}
 
-	public function PutFile($file_storage_path ='', $file_storage_name='' , $file_local_path='')
+ 
+	public function PutFile($local_upload_file_path ='',  $storage_zone_path='', $storage_zone_file_path='' )
 	{
 		/*
 			will upload a file to storage zone
@@ -852,38 +853,60 @@ class BunnyCDN
 			return array('status' =>'error' ,'code' =>'api_key_storage' ,'msg'=> 'missing storage api key');
 			die();
 		}
-		if(!$file_storage_path  )
+		if(!$local_upload_file_path  )
 		{
-			return array('status' =>'error' ,'code' =>'file_storage_path' ,'msg'=> 'missing storage path');
+			return array('status' =>'error' ,'code' =>'local_upload_file_path' ,'msg'=> 'missing file path');
 			die();
 		}
 
-		if(!$file_local_path  )
+		if(!$storage_zone_file_path  )
 		{
-			return array('status' =>'error' ,'code' =>'file_local_path' ,'msg'=> 'missing file path');
+			return array('status' =>'error' ,'code' =>'storage_zone_file_path' ,'msg'=> 'missing storage zone file path');
 			die();
 		}
+
+ 
+
+		//file variables
+		
+		//make folder and file name seo friendly to ensure no problem happen	  
+		$cdn_file_path = $this->seo_file_name($storage_zone_file_path);
+
+		$path_info 		= pathinfo($cdn_file_path);
+
+		//will get folders path
+		$info_dir_name 	= strtolower($path_info['dirname']);
+
+		//will get file name with ext
+		$info_file_name	= $path_info['basename'];
+
+		//$info_file_name = $path_info['filename'];
+		$info_file_ext 	= $path_info['extension'];
+
+
+		$storage_file_path = $storage_zone_path .$cdn_file_path;
+
+		 
 
 		$key =  $this->api_key_storage;
-		$api_url = $this->fix_url($this->api_url['storage'].$file_storage_path.$file_storage_name);
+		$api_url = $this->fix_url($this->api_url['storage'].$storage_file_path);
 
 		$get_header = $this->create_header($key);
 		
 	
 		// Open the file
-		$fileStream = fopen($file_local_path, "r") or die("Unable to open file!");
-		$dataLength = filesize($file_local_path);
+		$file = $local_upload_file_path;
+		$fileStream = fopen($file, "r") or die("Unable to open file!");
+		$dataLength = filesize($file);
 
 
 		// Initialize and configure curl
 		$curl = curl_init();
 		curl_setopt_array( $curl,
-			array( CURLOPT_CUSTOMREQUEST => 'PUT'
-			//, CURLOPT_URL => 'https://storage.bunnycdn.com/' . $pullZoneName . $filePath
-			, CURLOPT_URL => $api_url
-			
+			array( CURLOPT_CUSTOMREQUEST => 'PUT'			
+			, CURLOPT_URL => $api_url			
 			, CURLOPT_RETURNTRANSFER => 1   // means output will be a return value from curl_exec() instead of simply echoed
-			, CURLOPT_TIMEOUT => 60
+			, CURLOPT_TIMEOUT => 60000 		// in case you are uploading a really BIG file!!
 			, CURLOPT_FOLLOWLOCATION => 0   // don't follow any Location headers, use only the CURLOPT_URL, this is for security
 			, CURLOPT_FAILONERROR => 0      // do not fail verbosely fi the http_code is an error, this is for security
 			, CURLOPT_SSL_VERIFYPEER => 1   // do verify the SSL of CURLOPT_URL, this is for security
@@ -921,14 +944,67 @@ class BunnyCDN
 
 		return array(
 			'status' => 'success', 
-			'file_storage_path'	=>$file_storage_path,		
-			'file_storage_name'	=>$file_storage_name,
-			'file_path'	=>$file_storage_path.$file_storage_name,
+			'file_name'	=> $info_file_name	,
+			'storage_file_path'	=> $storage_file_path,
+			'cdn_file_path'	=> $cdn_file_path,
 			'msg'=> $response,			
 		);
 		die();
  
+	}	
+
+	public function GetFile($storage_path ='' )
+	{ 
+		/*
+			will get a file from the storage zone
+		*/
+
+		if(!$storage_path || !$this->api_key_storage)
+		{
+			return array('status' =>'error' ,'code' =>'missing_api_key_storage' ,'msg'=> 'missing storage missing api');
+			die();
+		}
+
+		$key =  $this->api_key_storage;
+		$api_url = $this->fix_url($this->api_url['storage'].$storage_path );
+
+		$accessKey = $this->api_key_storage;
+ 		
+ 		$get_header = $this->create_header($key);
+
+		$api_call = $this->run( array('call_method' => 'GET', 'api_url' => $api_url,'header' => $get_header  ) );		 
+
+		if($api_call['http_code'] !=200  )
+		{
+			//error message
+			$request_array =  json_decode(json_encode($api_call['data']));
+			$result = array
+			(	
+				"status" => 'error',
+				"http_code"=>$api_call['http_code'],
+				"msg" => json_decode($request_array) , 
+			);
+			return $result;
+			die();
+		}
+
+		$path_info = pathinfo($storage_path);
+		$file_name = $path_info['basename'];
+
+
+		$file = $api_call['data'];
+		
+		
+ 	 	header("Content-type: application/octet-stream");
+      	header("Content-Disposition: attachment; filename=$file_name");
+      	//will force to download...
+	    echo $file ; 
+ 
+
 	}
+
+
+
 
 	public function DeleteFile($storage_path ='')
 	{ 
@@ -938,7 +1014,7 @@ class BunnyCDN
 
 		if(!$storage_path || !$this->api_key_storage)
 		{
-			return array('status' =>'error' ,'code' =>'missing_api_key_storage' ,'msg'=> 'missing storage missing kpi');
+			return array('status' =>'error' ,'code' =>'missing_api_key_storage' ,'msg'=> 'missing storage missing api');
 			die();
 		}
 
@@ -972,11 +1048,57 @@ class BunnyCDN
 		die();
  
 	}
+
+	public function SecureLink($host_name ='', $security_key ='', $file_path='', $expiry_hr = 24)
+	{
+		$securityKey = $security_key;
+		$path = $file_path;
+
+		// Set the time of expiry to one hour from now
+		$expires = (time() + 3600 ) * $expiry_hr; 
+
+		// Generate the token
+		$hashableBase = $securityKey.$path.$expires;
+
+		// If using IP validation
+		// $hashableBase .= "146.14.19.7";
+
+		$token = md5($hashableBase, true);
+		$token = base64_encode($token);
+		$token = strtr($token, '+/', '-_');
+		$token = str_replace('=', '', $token);  
+
+		// Generate the URL
+		$url =  "$host_name$file_path?token={$token}&expires={$expires}" ;
+		
+		return $url; 
+	}
 	//--->storage > end
 
-  	public function DownloadFile($file_url) 
+	public function DownloadFile($file_url = '', $oupt_file_name='') 
+  	{
+		//this is a fast way to download a file
+  		//remove any query string data
+  		if(isset($oupt_file_name))
+  		{
+  			$file_name = $oupt_file_name;			
+  		}
+  		if(empty($oupt_file_name))
+  		{
+			$file_name = preg_replace('/\?.*/', '', basename($file_url));
+  		}
+		
+		header("Content-Type: application/octet-stream");
+		header("Content-Transfer-Encoding: Binary");
+		header("Content-disposition: attachment; filename=$file_name"); 	 
+		readfile($file_url);
+	}
+
+
+  	public function DownloadFile1($file_url) 
   	{
   		/*
+			this is a slow way to download a file
 			will allow you to download a remote file from any server that is accessible 
 		*/
 
@@ -987,7 +1109,9 @@ class BunnyCDN
 	    if ($filedata)
 	    {
 	        // GET A NAME FOR THE FILE
-	        $basename = basename($filename);
+	        //remove any query string data
+			$basename = preg_replace('/\?.*/', '', basename($file_url));
+	        //$basename = basename($filename);
 
 	        // THESE HEADERS ARE USED ON ALL BROWSERS
 	        header("Content-Type: application-x/force-download");
@@ -1102,5 +1226,57 @@ class BunnyCDN
 	    }
 	    return sprintf($format, $bytes / pow($mod, $power), $units[$power]);
 	}
+
+	private function seo_file_name($file_name)
+	{ 	
+		/*
+			will convert file name into seo url file name
+			
+			i.e.
+			$file_name = 'code with mark !@#$%^*()_+~ $$%& _03e05 122-9****.mp4';
+
+			//output will be
+			code-with-mark-03e05-122-9.mp4
+
+			Note only use this for file names and not for folder names!!!
+
+		*/	
+		
+		$path_info 		= pathinfo($file_name);		
+		$info_dir_name  = preg_replace("/[\s]/", "-", strtolower($path_info['dirname']) ); 
+		
+
+		$info_file_name = $path_info['filename'];
+		$info_file_ext 	= $path_info['extension'];		
+
+		$string = $info_file_name ;
+
+	    $src = 'àáâãäçèéêëìíîïñòóôõöøùúûüýÿßÀÁÂÃÄÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜÝ';
+	    $rep = 'aaaaaceeeeiiiinoooooouuuuyysAAAAACEEEEIIIINOOOOOOUUUUY';
+	    // strip off accents (assuming utf8 PHP - note strtr() requires single-byte)
+	    $string = strtr(utf8_decode($string), utf8_decode($src), $rep);
+	    // convert to lower case
+	    $string = strtolower($string);
+	    // strip all but alphanumeric, whitespace, dot, underscore, hyphen
+	    $string = preg_replace("/[^a-z0-9\s._-]/", "", $string);
+	    // merge multiple consecutive whitespaces, dots, underscores, hyphens
+	    $string = preg_replace("/[\s._-]+/", " ", $string);
+	    // convert whitespaces to hyphens
+	    $string = preg_replace("/[\s]/", "-", $string);
+		
+		
+		if(substr($info_dir_name,1))
+		{
+			$file_path 	= $info_dir_name."/".$string.'.'.$info_file_ext;
+		}
+		else
+		{
+			$file_path 	= "/". $string.'.'.$info_file_ext;
+		}
+ 
+	    return $file_path;
+	}
+
+	
 	//--->private functions > end
 }	
