@@ -558,6 +558,69 @@ class BunnyCDN
 		die();
 	}
 
+	public function GetStorageZoneList()
+	{	
+		/*
+			will get all of the zones for the account
+		*/
+		
+		if( !$this->api_key_account)
+		{
+			return array('status' =>'error' ,'code' =>'api_key_account' ,'msg'=> 'missing acount api key');
+			die();
+		}
+
+		$key =  $this->api_key_account;
+		$api_url = $this->api_url['zone'].'/storagezone';
+
+		$get_header = $this->create_header($key);
+
+		$api_call = $this->run( array('call_method' => 'GET', 'api_url' => $api_url,'header' => $get_header , ) );
+		
+		if($api_call['http_code'] !=200)
+		{
+			//error message
+			$request_array =  json_decode(json_encode($api_call['data']));
+			$result = array
+			(	
+				"status" => 'error',
+				"http_code"=>$api_call['http_code'],
+				"msg" => json_decode($request_array)->Message , 
+			);
+			return $result;
+			die();
+		}
+
+		$zone_data =  json_decode($api_call['data']);	
+ 		$a1 = array();
+ 		foreach ($zone_data as  $k1 => $v1) 
+		{			  
+			$arr_hostnames  = array();
+
+			//--->get all the hostnames > start
+			if($v1->Hostnames)
+			{
+				foreach ($v1->Hostnames as $key => $v2) 
+				{
+					array_push($arr_hostnames,  $v2->Value);
+				}
+			}
+			//--->get all the hostnames > end
+
+			$d = array
+			(	
+				"zone_id" => $v1->Id,
+				"zone_name"=>$v1->Name,
+				"monthly_bandwidth_used" =>$this->format_bytes($v1->MonthlyBandwidthUsed),				
+				"host_names" =>$arr_hostnames,
+			);
+			array_push($a1,$d);
+		}
+		return array('status' => 'success', 'zone_smry'=>$a1,"zone_details" => $zone_data);
+
+	}
+
+
 	public function PurgeURL($url = '')
 	{	
 		/*
@@ -1764,4 +1827,6 @@ class BunnyCDN
 
 	
 	//--->private functions > end
-}	
+}
+
+?>
